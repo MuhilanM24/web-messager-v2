@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Secure Messenger - Notifications</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent:   #c084fc;
+      --accent2:  #818cf8;
+      --accent4:  #34d399;
+      --bg:       #06060c;
+      --card:     #0e0e18;
+      --surface:  #141422;
+      --surface2: #1a1a2e;
+      --border:   #232340;
+      --border2:  #2d2d4a;
+      --text:     #eeeef4;
+      --muted:    #6b6b88;
+      --danger:   #f87171;
+      --warning:  #fbbf24;
+      --success:  #34d399;
+    }
+
+    body {
+      font-family: 'Space Grotesk', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    .cyber-bg {
+      position: fixed; inset: 0;
+      z-index: 0; pointer-events: none; overflow: hidden;
+    }
+    .cyber-bg::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 59px,
+          rgba(192,132,252,.015) 60px),
+        repeating-linear-gradient(90deg, transparent, transparent 59px,
+          rgba(192,132,252,.015) 60px);
+    }
+    .bg-blob {
+      position: absolute; border-radius: 50%;
+      filter: blur(120px); opacity: .08;
+      animation: blobDrift 20s ease-in-out infinite alternate;
+    }
+    .bg-blob:nth-child(1){
+      width:500px; height:500px;
+      background:var(--accent); top:-15%; left:-10%;
+    }
+    .bg-blob:nth-child(2){
+      width:400px; height:400px;
+      background:var(--accent2); bottom:-10%; right:-8%;
+      animation-delay:-8s;
+    }
+    @keyframes blobDrift {
+      0%   { transform: translate(0,0) scale(1); }
+      100% { transform: translate(30px,-30px) scale(1.1); }
+    }
+
+    /* NAV */
+    .top-nav {
+      position: sticky; top: 0; z-index: 50;
+      padding: 12px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      background: rgba(6,6,12,.85);
+      backdrop-filter: blur(30px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-left { display: flex; align-items: center; gap: 10px; }
+    .back-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--text); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; transition: all .2s;
+      text-decoration: none; font-family: inherit;
+    }
+    .back-btn:hover { background: var(--surface2); transform: translateX(-2px); }
+    .nav-title { font-size: 17px; font-weight: 600; letter-spacing: -.3px; }
+    .nav-right { display: flex; align-items: center; gap: 8px; }
+    .nav-btn {
+      padding: 7px 14px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); font-size: 12px; font-weight: 500;
+      font-family: inherit; cursor: pointer;
+      transition: all .2s; white-space: nowrap;
+    }
+    .nav-btn:hover { background: var(--surface2); color: var(--text); }
+    .nav-btn.danger:hover {
+      background: rgba(248,113,113,.1); color: var(--danger);
+      border-color: rgba(248,113,113,.3);
+    }
+
+    /* MAIN */
+    .main {
+      position: relative; z-index: 1;
+      max-width: 680px; margin: 0 auto;
+      padding: 20px 14px 60px;
+    }
+
+    /* PERMISSION BANNER */
+    .permission-banner {
+      display: none; align-items: center; gap: 14px;
+      padding: 16px 18px; margin-bottom: 20px;
+      border-radius: 18px;
+      background: linear-gradient(135deg,
+        rgba(192,132,252,.08), rgba(129,140,248,.08));
+      border: 1px solid rgba(192,132,252,.2);
+    }
+    .permission-banner.show {
+      display: flex;
+      animation: slideDown .5s cubic-bezier(.22,1,.36,1);
+    }
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-15px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .perm-icon {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .perm-info { flex: 1; }
+    .perm-info h3 { font-size: 15px; font-weight: 600; margin-bottom: 3px; }
+    .perm-info p  { font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .perm-btn {
+      padding: 9px 18px; border-radius: 10px; border: none;
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      color: var(--bg); font-size: 13px; font-weight: 600;
+      font-family: inherit; cursor: pointer;
+      white-space: nowrap; transition: all .2s; flex-shrink: 0;
+    }
+    .perm-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(192,132,252,.3); }
+    .perm-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    /* FCM STATUS */
+    .fcm-status {
+      display: none; padding: 12px 16px; margin-bottom: 16px;
+      border-radius: 14px; font-size: 13px; line-height: 1.5;
+    }
+    .fcm-status.show   { display: block; }
+    .fcm-status.success {
+      background: rgba(52,211,153,.08);
+      border: 1px solid rgba(52,211,153,.2);
+      color: var(--success);
+    }
+    .fcm-status.error {
+      background: rgba(248,113,113,.08);
+      border: 1px solid rgba(248,113,113,.2);
+      color: var(--danger);
+    }
+    .fcm-status.info {
+      background: rgba(129,140,248,.08);
+      border: 1px solid rgba(129,140,248,.2);
+      color: var(--accent2);
+    }
+
+    /* DEBUG PANEL */
+    .debug-panel {
+      padding: 10px 14px; margin-bottom: 16px;
+      border-radius: 12px; font-size: 11px;
+      background: rgba(0,0,0,.4);
+      border: 1px solid var(--border);
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--muted); display: none;
+      max-height: 160px; overflow-y: auto;
+    }
+    .debug-panel.show { display: block; }
+    .debug-panel div  { margin-bottom: 2px; }
+    .debug-panel .ok  { color: var(--success); }
+    .debug-panel .err { color: var(--danger); }
+    .debug-panel .warn{ color: var(--warning); }
+
+    /* STATS */
+    .stats-row {
+      display: grid; grid-template-columns: repeat(3,1fr);
+      gap: 10px; margin-bottom: 20px;
+    }
+    .stat-card {
+      padding: 14px 16px; border-radius: 16px;
+      background: var(--card); border: 1px solid var(--border);
+      text-align: center;
+      animation: cardIn .5s cubic-bezier(.22,1,.36,1) both;
+    }
+    .stat-card:nth-child(1){ animation-delay:.1s; }
+    .stat-card:nth-child(2){ animation-delay:.2s; }
+    .stat-card:nth-child(3){ animation-delay:.3s; }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .stat-num {
+      font-size: 26px; font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      line-height: 1; margin-bottom: 4px;
+    }
+    .stat-label {
+      font-size: 11px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .8px;
+    }
+
+    /* SETTINGS */
+    .settings-card {
+      margin-bottom: 20px; border-radius: 20px;
+      background: var(--card); border: 1px solid var(--border);
+      overflow: hidden; animation: cardIn .5s ease both;
+    }
+    .settings-head {
+      padding: 14px 18px; font-size: 13px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: .8px;
+      font-family: 'JetBrains Mono', monospace;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .settings-toggle-btn {
+      font-size: 11px; color: var(--accent); cursor: pointer;
+      font-family: inherit; background: none; border: none;
+      padding: 2px 8px; border-radius: 6px; transition: background .2s;
+    }
+    .settings-toggle-btn:hover { background: rgba(192,132,252,.1); }
+    .settings-body { display: block; }
+    .settings-body.collapsed { display: none; }
+    .setting-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(35,35,64,.5);
+      transition: background .2s;
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-row:hover { background: rgba(192,132,252,.03); }
+    .setting-info { display: flex; align-items: center; gap: 12px; }
+    .setting-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .setting-text .label { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+    .setting-text .sub   { font-size: 12px; color: var(--muted); }
+
+    /* TOKEN */
+    .token-row {
+      padding: 12px 18px;
+      border-top: 1px solid rgba(35,35,64,.5);
+      background: rgba(0,0,0,.2);
+    }
+    .token-label {
+      font-size: 11px; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase; letter-spacing: .8px;
+      margin-bottom: 6px;
+    }
+    .token-value {
+      font-size: 10px; color: var(--muted);
+      font-family: 'JetBrains Mono', monospace;
+      word-break: break-all; line-height: 1.5;
+      padding: 8px; border-radius: 8px;
+      background: var(--surface); border: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .token-value.active { color: var(--accent2); }
+
+    /* TOGGLE */
+    .toggle { position: relative; width: 46px; height: 26px; }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+    .toggle-track {
+      position: absolute; inset: 0; border-radius: 13px;
+      background: var(--surface2); border: 1px solid var(--border2);
+      cursor: pointer; transition: all .3s cubic-bezier(.4,0,.2,1);
+    }
+    .toggle-track::after {
+      content: ''; position: absolute; top: 3px; left: 3px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--muted);
+      transition: all .3s cubic-bezier(.34,1.56,.64,1);
+    }
+    .toggle input:checked + .toggle-track {
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      border-color: transparent;
+    }
+    .toggle input:checked + .toggle-track::after {
+      transform: translateX(20px);
+      background: white; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+
+    /* FILTER TABS */
+    .filter-tabs {
+      display: flex; gap: 6px; margin-bottom: 16px;
+      overflow-x: auto; padding-bottom: 2px; scrollbar-width: none;
+    }
+    .filter-tabs::-webkit-scrollbar { display: none; }
+    .filter-tab {
+      padding: 8px 16px; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); font-size: 13px; font-weight: 500;
+      font-family: inherit; cursor: pointer; white-space: nowrap;
+      transition: all .2s; display: flex; align-items: center; gap: 6px;
+    }
+    .filter-tab.active {
+      background: linear-gradient(135deg,
+        rgba(192,132,252,.15), rgba(129,140,248,.15));
+      border-color: rgba(192,132,252,.3); color: var(--accent);
+    }
+    .filter-tab:hover:not(.active) { background: var(--surface2); color: var(--text); }
+    .tab-count {
+      min-width: 18px; height: 18px; padding: 0 5px;
+      border-radius: 6px; background: rgba(192,132,252,.15);
+      color: var(--accent); font-size: 10px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* NOTIFICATION LIST */
+    .notif-list { display: flex; flex-direction: column; gap: 8px; }
+    .notif-group { margin-bottom: 6px; }
+    .group-label {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 8px; padding: 0 4px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .group-label .line {
+      flex: 1; height: 1px;
+      background: linear-gradient(90deg,var(--border),transparent);
+    }
+
+    /* NOTIFICATION CARD */
+    .notif-card {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 16px; border-radius: 18px;
+      background: var(--card); border: 1px solid var(--border);
+      cursor: pointer; position: relative; overflow: hidden;
+      transition: all .3s cubic-bezier(.4,0,.2,1);
+      animation: notifIn .4s cubic-bezier(.22,1,.36,1) both;
+    }
+    @keyframes notifIn {
+      from { opacity: 0; transform: translateX(-15px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .notif-card.unread {
+      border-color: rgba(192,132,252,.2);
+      background: linear-gradient(135deg,rgba(14,14,24,1),rgba(20,20,34,1));
+    }
+    .notif-card.unread::before {
+      content: ''; position: absolute;
+      left: 0; top: 0; bottom: 0; width: 3px;
+      background: linear-gradient(to bottom,var(--accent),var(--accent2));
+      border-radius: 3px 0 0 3px;
+    }
+    .notif-card:hover {
+      background: var(--surface); border-color: var(--border2);
+      transform: translateX(4px);
+      box-shadow: 0 4px 20px rgba(0,0,0,.3);
+    }
+    .notif-card:active { transform: translateX(2px) scale(.99); }
+    .notif-card.dismissed { animation: dismissOut .4s ease forwards; }
+    @keyframes dismissOut {
+      to {
+        opacity: 0; transform: translateX(100%);
+        max-height: 0; margin: 0; padding: 0; border: none;
+      }
+    }
+
+    .notif-icon {
+      width: 46px; height: 46px; border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; flex-shrink: 0; position: relative;
+    }
+    .notif-icon.msg      { background:rgba(192,132,252,.12); border:1px solid rgba(192,132,252,.2); }
+    .notif-icon.req      { background:rgba(251,191,36,.12);  border:1px solid rgba(251,191,36,.2); }
+    .notif-icon.call     { background:rgba(52,211,153,.12);  border:1px solid rgba(52,211,153,.2); }
+    .notif-icon.system   { background:rgba(129,140,248,.12); border:1px solid rgba(129,140,248,.2); }
+    .notif-icon.security { background:rgba(248,113,113,.12); border:1px solid rgba(248,113,113,.2); }
+
+    .unread-dot {
+      position: absolute; top: -2px; right: -2px;
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--accent); border: 2px solid var(--card);
+      animation: dotPulse 2s ease-in-out infinite;
+    }
+    @keyframes dotPulse {
+      0%,100% { box-shadow: 0 0 0 0   rgba(192,132,252,.4); }
+      50%      { box-shadow: 0 0 0 5px rgba(192,132,252,0); }
+    }
+
+    .notif-body { flex: 1; min-width: 0; }
+    .notif-top {
+      display: flex; align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px; margin-bottom: 4px;
+    }
+    .notif-sender {
+      font-size: 14px; font-weight: 600; letter-spacing: -.2px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .notif-time {
+      font-size: 11px; color: var(--muted); white-space: nowrap;
+      font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+    }
+    .notif-preview {
+      font-size: 13px; color: var(--muted); line-height: 1.4;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .notif-actions {
+      display: none; gap: 6px;
+      margin-top: 10px; flex-wrap: wrap;
+    }
+    .notif-card.expanded .notif-actions { display: flex; }
+    .notif-act-btn {
+      padding: 7px 16px; border-radius: 9px; border: none;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: all .2s;
+    }
+    .notif-act-btn.accept {
+      background: linear-gradient(135deg,var(--accent4),#2dd4bf);
+      color: #042f2e;
+    }
+    .notif-act-btn.reject {
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .notif-act-btn.open-chat {
+      background: linear-gradient(135deg,var(--accent),var(--accent2));
+      color: var(--bg);
+    }
+    .notif-act-btn.dismiss {
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    .notif-act-btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+
+    .type-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 6px;
+      font-size: 10px; font-weight: 600;
+      font-family: 'JetBrains Mono', monospace; margin-top: 5px;
+    }
+    .type-badge.msg      { background:rgba(192,132,252,.1); color:var(--accent); }
+    .type-badge.req      { background:rgba(251,191,36,.1);  color:var(--warning); }
+    .type-badge.call     { background:rgba(52,211,153,.1);  color:var(--accent4); }
+    .type-badge.system   { background:rgba(129,140,248,.1); color:var(--accent2); }
+    .type-badge.security { background:rgba(248,113,113,.1); color:var(--danger); }
+
+    .notif-delete-btn {
+      width: 28px; height: 28px; border-radius: 8px; border: none;
+      background: transparent; color: var(--muted); cursor: pointer;
+      font-size: 14px; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all .2s; align-self: flex-start;
+    }
+    .notif-delete-btn:hover { background: rgba(248,113,113,.1); color: var(--danger); }
+
+    /* EMPTY STATE */
+    .empty-state {
+      display: none; flex-direction: column; align-items: center;
+      justify-content: center; padding: 60px 20px;
+      text-align: center; gap: 12px;
+    }
+    .empty-state.show { display: flex; }
+    .empty-icon {
+      width: 72px; height: 72px; border-radius: 22px;
+      background: var(--surface); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 32px; animation: emptyFloat 3s ease-in-out infinite;
+    }
+    @keyframes emptyFloat {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-10px); }
+    }
+    .empty-title { font-size: 17px; font-weight: 600; }
+    .empty-sub   { font-size: 13px; color: var(--muted); max-width: 240px; line-height: 1.5; }
+
+    /* SKELETON */
+    .skeleton-card {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 14px 16px; border-radius: 18px;
+      background: var(--card); border: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .sk {
+      background: linear-gradient(90deg,
+        var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite; border-radius: 8px;
+    }
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position:  200% 0; }
+    }
+    .sk-avatar { width:46px; height:46px; border-radius:14px; flex-shrink:0; }
+    .sk-body   { flex:1; display:flex; flex-direction:column; gap:8px; }
+    .sk-line   { height: 12px; }
+    .sk-line.short { width: 45%; }
+    .sk-line.long  { width: 90%; }
+    .sk-line.mid   { width: 70%; }
+
+    /* LOAD MORE */
+    .load-more {
+      margin-top: 16px; width: 100%; padding: 12px;
+      border-radius: 14px; border: 1px dashed var(--border2);
+      background: transparent; color: var(--muted);
+      font-size: 13px; font-family: inherit;
+      cursor: pointer; transition: all .2s; display: none;
+    }
+    .load-more.show { display: block; }
+    .load-more:hover {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(192,132,252,.05);
+    }
+
+    /* TEST BTN */
+    .test-btn {
+      width: 100%; padding: 12px; margin-bottom: 16px;
+      border-radius: 14px; border: 1px solid rgba(192,132,252,.3);
+      background: rgba(192,132,252,.05); color: var(--accent);
+      font-size: 13px; font-weight: 500; font-family: inherit;
+      cursor: pointer; transition: all .2s; display: none;
+    }
+    .test-btn.show { display: block; }
+    .test-btn:hover { background: rgba(192,132,252,.1); }
+    .test-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+    @media (max-width: 480px) {
+      .top-nav   { padding: 10px 12px; }
+      .main      { padding: 14px 10px 50px; }
+      .stats-row { gap: 6px; }
+      .stat-num  { font-size: 20px; }
+      .perm-btn  { padding: 8px 12px; font-size: 12px; }
+      .nav-right { gap: 4px; }
+      .nav-btn   { padding: 6px 10px; font-size: 11px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="cyber-bg">
+  <div class="bg-blob"></div>
+  <div class="bg-blob"></div>
+</div>
+
+<div class="top-nav">
+  <div class="nav-left">
+    <button class="back-btn" onclick="window.location.href='chats.html'">←</button>
+    <div class="nav-title">Notifications</div>
+  </div>
+  <div class="nav-right">
+    <button class="nav-btn" id="markAllReadBtn">Mark all read</button>
+    <button class="nav-btn danger" id="clearAllBtn">Clear all</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <div class="permission-banner" id="permissionBanner">
+    <div class="perm-icon">🔔</div>
+    <div class="perm-info">
+      <h3>Enable Push Notifications</h3>
+      <p>Get notified about messages and calls even when the app is closed.</p>
+    </div>
+    <button class="perm-btn" id="enableNotifBtn">Enable</button>
+  </div>
+
+  <div class="fcm-status"  id="fcmStatus"></div>
+  <div class="debug-panel" id="debugPanel"></div>
+
+  <button class="test-btn" id="testNotifBtn">🔔 Send Test Notification</button>
+
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num" id="totalCount">0</div>
+      <div class="stat-label">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="unreadCount">0</div>
+      <div class="stat-label">Unread</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num" id="todayCount">0</div>
+      <div class="stat-label">Today</div>
+    </div>
+  </div>
+
+  <div class="settings-card">
+    <div class="settings-head">
+      Notification Settings
+      <button class="settings-toggle-btn" id="settingsToggleBtn">Hide ▲</button>
+    </div>
+    <div class="settings-body" id="settingsBody">
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-icon" style="background:rgba(192,132,252,.1)">💬</div>
+          <div class="setting-text">
+            <div class="label">Messages</div>
+            <div class="sub">New message alerts</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="togMessages" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-icon" style="background:rgba(251,191,36,.1)">👋</div>
+          <div class="setting-text">
+            <div class="label">Friend Requests</div>
+            <div class="sub">New connection requests</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="togRequests" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-icon" style="background:rgba(52,211,153,.1)">📞</div>
+          <div class="setting-text">
+            <div class="label">Calls</div>
+            <div class="sub">Incoming call alerts</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="togCalls" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-icon" style="background:rgba(129,140,248,.1)">🔊</div>
+          <div class="setting-text">
+            <div class="label">Sound</div>
+            <div class="sub">Play notification sound</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="togSound" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-icon" style="background:rgba(244,114,182,.1)">📳</div>
+          <div class="setting-text">
+            <div class="label">Vibration</div>
+            <div class="sub">Vibrate on notification</div>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="togVibrate" checked>
+          <div class="toggle-track"></div>
+        </label>
+      </div>
+      <div class="token-row" id="tokenRow" style="display:none">
+        <div class="token-label">FCM Device Token</div>
+        <div class="token-value" id="tokenValue" onclick="copyToken()">
+          Not registered
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="filter-tabs" id="filterTabs">
+    <button class="filter-tab active" data-filter="all">
+      All <span class="tab-count" id="tabAll">0</span>
+    </button>
+    <button class="filter-tab" data-filter="message">
+      💬 Messages <span class="tab-count" id="tabMessage">0</span>
+    </button>
+    <button class="filter-tab" data-filter="request">
+      👋 Requests <span class="tab-count" id="tabRequest">0</span>
+    </button>
+    <button class="filter-tab" data-filter="call">
+      📞 Calls <span class="tab-count" id="tabCall">0</span>
+    </button>
+    <button class="filter-tab" data-filter="system">
+      🔔 System <span class="tab-count" id="tabSystem">0</span>
+    </button>
+  </div>
+
+  <div id="skeletonList">
+    <div class="skeleton-card">
+      <div class="sk sk-avatar"></div>
+      <div class="sk-body">
+        <div class="sk sk-line short"></div>
+        <div class="sk sk-line long"></div>
+        <div class="sk sk-line mid"></div>
+      </div>
+    </div>
+    <div class="skeleton-card">
+      <div class="sk sk-avatar"></div>
+      <div class="sk-body">
+        <div class="sk sk-line short"></div>
+        <div class="sk sk-line long"></div>
+      </div>
+    </div>
+    <div class="skeleton-card">
+      <div class="sk sk-avatar"></div>
+      <div class="sk-body">
+        <div class="sk sk-line short"></div>
+        <div class="sk sk-line long"></div>
+        <div class="sk sk-line mid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="notif-list" id="notifList" style="display:none;"></div>
+
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">🔕</div>
+    <div class="empty-title">No notifications</div>
+    <div class="empty-sub">You're all caught up! Notifications will appear here.</div>
+  </div>
+
+  <button class="load-more" id="loadMoreBtn">Load more notifications</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════
+   FIREBASE INIT
+═══════════════════════════════════════════ */
+const firebaseConfig = {
+  apiKey:            "AIzaSyAFKOgNZgaIZ9q09VvmKJrnEWys7ancSEE",
+  authDomain:        "web-messager-533ae.firebaseapp.com",
+  projectId:         "web-messager-533ae",
+  storageBucket:     "web-messager-533ae.firebasestorage.app",
+  messagingSenderId: "466370688536",
+  appId:             "1:466370688536:web:90e63387db2e4b697ff56d",
+  measurementId:     "G-Q3136YFH7C"
+};
+
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db   = firebase.firestore();
+
+const VAPID_KEY = 'BPV2cE31TAcPONIrU0ureplOc-rX3tkv5OxGUBIvxxxnuWL3JpyzaPLUVk6EpDCKv6UjiopP6VI9nKEIExCBLjo';
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let currentUserUID    = null;
+let allNotifications  = [];
+let currentFilter     = 'all';
+let displayedCount    = 0;
+const PAGE_SIZE       = 20;
+let unsubscribeNotifs = null;
+let messagingInstance = null;
+let fcmToken          = null;
+let swRegistration    = null;
+
+/* ═══════════════════════════════════════════
+   DEBUG
+═══════════════════════════════════════════ */
+function debugLog(msg, type = 'info') {
+  const panel = document.getElementById('debugPanel');
+  panel.classList.add('show');
+  const line     = document.createElement('div');
+  line.className = type;
+  line.textContent = '› ' + msg;
+  panel.appendChild(line);
+  console.log('[FCM]', msg);
+}
+
+/* ═══════════════════════════════════════════
+   SW PATH
+═══════════════════════════════════════════ */
+function getServiceWorkerPath() {
+  const parts = window.location.pathname.split('/').filter(Boolean);
+  if (parts.length > 0 && parts[parts.length - 1].includes('.')) parts.pop();
+  const basePath = parts.length > 0 ? '/' + parts.join('/') : '';
+  return basePath + '/firebase-messaging-sw.js';
+}
+
+async function checkSWExists(swPath) {
+  try {
+    const r = await fetch(swPath, { method: 'HEAD' });
+    if (r.ok) { debugLog('SW file found ✅', 'ok'); return true; }
+    debugLog('SW file NOT found ❌ at ' + swPath, 'err');
+    return false;
+  } catch (e) {
+    debugLog('SW check error: ' + e.message, 'err');
+    return false;
+  }
+}
+
+/* ═══════════════════════════════════════════
+   INIT FCM
+═══════════════════════════════════════════ */
+async function initFCM() {
+  if (!('serviceWorker' in navigator)) {
+    showFCMStatus('error', '⚠️ Service Workers not supported');
+    return;
+  }
+  if (!('PushManager' in window)) {
+    showFCMStatus('error', '⚠️ Push not supported in this browser');
+    return;
+  }
+  if (!('Notification' in window)) {
+    showFCMStatus('error', '⚠️ Notifications API not available');
+    return;
+  }
+
+  try {
+    const swPath = getServiceWorkerPath();
+    debugLog('SW path: ' + swPath);
+
+    const exists = await checkSWExists(swPath);
+    if (!exists) {
+      showFCMStatus('error',
+        '⚠️ firebase-messaging-sw.js not found at ' + swPath);
+      return;
+    }
+
+    swRegistration = await navigator.serviceWorker.register(swPath, {
+      updateViaCache: 'none'
+    });
+    debugLog('SW registered: ' + swRegistration.scope, 'ok');
+
+    await navigator.serviceWorker.ready;
+    debugLog('SW ready ✅', 'ok');
+
+    messagingInstance = firebase.messaging();
+
+    // Foreground messages
+    messagingInstance.onMessage(payload => {
+      debugLog('📨 Foreground message');
+      handleForegroundMessage(payload);
+    });
+
+    // SW click handler
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'NOTIFICATION_CLICK') {
+        const data = e.data.data || {};
+        if (data.chatFriendId || data.fromUid) {
+          localStorage.setItem('selectedFriend', JSON.stringify({
+            id:    data.chatFriendId || data.fromUid,
+            name:  data.fromName  || '',
+            photo: data.fromPhoto || ''
+          }));
+          window.location.href = 'chat.html';
+        }
+      }
+    });
+
+    debugLog('Permission: ' + Notification.permission);
+
+    if (Notification.permission === 'granted') {
+      await getAndSaveFCMToken();
+    } else if (Notification.permission === 'default') {
+      document.getElementById('permissionBanner').classList.add('show');
+    } else {
+      showFCMStatus('error',
+        '🚫 Notifications blocked. Click 🔒 in address bar → Allow Notifications.');
+    }
+
+  } catch (err) {
+    console.error('initFCM error:', err);
+    debugLog('initFCM error: ' + err.message, 'err');
+    showFCMStatus('error', '⚠️ Push setup failed: ' + err.message);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   GET & SAVE FCM TOKEN
+═══════════════════════════════════════════ */
+async function getAndSaveFCMToken() {
+  if (!messagingInstance || !currentUserUID) return;
+
+  try {
+    showFCMStatus('info', '⟳ Getting push token...');
+
+    if (!swRegistration) {
+      showFCMStatus('error', '⚠️ SW not registered. Refresh the page.');
+      return;
+    }
+
+    let token;
+    try {
+      // ✅ Pass serviceWorkerRegistration to prevent root 404 error
+      token = await messagingInstance.getToken({
+        vapidKey:                  VAPID_KEY,
+        serviceWorkerRegistration: swRegistration
+      });
+    } catch (tokenErr) {
+      console.error('getToken error:', tokenErr);
+      debugLog('getToken failed: ' + tokenErr.code, 'err');
+      if (tokenErr.code === 'messaging/permission-blocked') {
+        showFCMStatus('error', '🚫 Notifications blocked. Enable in browser settings.');
+      } else {
+        showFCMStatus('error', '⚠️ Token error: ' + tokenErr.message);
+      }
+      return;
+    }
+
+    if (!token) {
+      showFCMStatus('error', '⚠️ Empty token. Check VAPID key.');
+      return;
+    }
+
+    fcmToken = token;
+    debugLog('Token: ' + token.substring(0, 25) + '...', 'ok');
+
+    const TS = firebase.firestore.FieldValue.serverTimestamp();
+
+    // Save to users collection
+    try {
+      await db.collection('users').doc(currentUserUID).set({
+        fcmTokens:        firebase.firestore.FieldValue.arrayUnion(fcmToken),
+        notifPermission:  'granted',
+        notifUpdatedAt:   TS,
+        lastTokenRefresh: TS
+      }, { merge: true });
+      debugLog('Saved to users ✅', 'ok');
+    } catch (e) {
+      debugLog('users save error: ' + e.message, 'err');
+    }
+
+    // Save to fcmTokens collection
+    try {
+      await db.collection('fcmTokens').doc(currentUserUID).set({
+        uid:       currentUserUID,
+        token:     fcmToken,
+        platform:  'web',
+        updatedAt: TS
+      }, { merge: true });
+      debugLog('Saved to fcmTokens ✅', 'ok');
+    } catch (e) {
+      debugLog('fcmTokens save error: ' + e.code, 'err');
+      if (e.code === 'permission-denied') {
+        showFCMStatus('error',
+          '🔐 Update Firestore rules for fcmTokens collection.');
+        return;
+      }
+    }
+
+    // Show token in UI
+    document.getElementById('tokenRow').style.display = 'block';
+    const tokenVal       = document.getElementById('tokenValue');
+    tokenVal.className   = 'token-value active';
+    tokenVal.textContent = token.substring(0, 50) + '... (click to copy)';
+    tokenVal.title       = token;
+
+    document.getElementById('permissionBanner').classList.remove('show');
+    showFCMStatus('success',
+      '✅ Push notifications enabled! You\'ll get alerts even when app is closed.');
+    setTimeout(hideFCMStatus, 6000);
+
+    document.getElementById('testNotifBtn').classList.add('show');
+
+  } catch (err) {
+    console.error('getAndSaveFCMToken error:', err);
+    debugLog('Error: ' + err.message, 'err');
+    if (err.code === 'permission-denied') {
+      showFCMStatus('error',
+        '🔐 Permission denied. Update Firestore Security Rules.');
+    } else {
+      showFCMStatus('error', '⚠️ Registration failed: ' + err.message);
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   COPY TOKEN
+═══════════════════════════════════════════ */
+function copyToken() {
+  if (!fcmToken) return;
+  navigator.clipboard.writeText(fcmToken).then(() => {
+    const el = document.getElementById('tokenValue');
+    el.textContent = '✅ Copied!';
+    setTimeout(() => {
+      el.textContent = fcmToken.substring(0, 50) + '... (click to copy)';
+    }, 2000);
+  }).catch(() => {});
+}
+
+/* ═══════════════════════════════════════════
+   FOREGROUND MESSAGE
+═══════════════════════════════════════════ */
+function handleForegroundMessage(payload) {
+  const notification = payload.notification || {};
+  const data         = payload.data         || {};
+  const title        = notification.title   || data.fromName || 'Secure Messenger';
+  const body         = notification.body    || data.body     || '';
+
+  if (Notification.permission === 'granted') {
+    try {
+      const n = new Notification(title, {
+        body,
+        icon: '/web-messager/icon.png',
+        tag:  data.tag || ('fg-' + Date.now())
+      });
+      n.onclick = () => {
+        window.focus();
+        if (data.chatFriendId || data.fromUid) {
+          localStorage.setItem('selectedFriend', JSON.stringify({
+            id:   data.chatFriendId || data.fromUid,
+            name: data.fromName     || ''
+          }));
+          window.location.href = 'chat.html';
+        }
+        n.close();
+      };
+    } catch (e) { console.warn('Notification error:', e); }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   REQUEST PERMISSION
+═══════════════════════════════════════════ */
+async function requestPushPermission() {
+  const btn = document.getElementById('enableNotifBtn');
+  btn.disabled    = true;
+  btn.textContent = 'Enabling...';
+
+  try {
+    let permission;
+    try { permission = await Notification.requestPermission(); }
+    catch (_) {
+      permission = await new Promise(r => Notification.requestPermission(r));
+    }
+
+    debugLog('Permission: ' + permission);
+
+    if (permission === 'granted') {
+      await getAndSaveFCMToken();
+    } else if (permission === 'denied') {
+      showFCMStatus('error',
+        '🚫 Denied. Click 🔒 in address bar → Notifications → Allow.');
+      document.getElementById('permissionBanner').classList.remove('show');
+      btn.disabled    = false;
+      btn.textContent = 'Enable';
+    } else {
+      btn.disabled    = false;
+      btn.textContent = 'Enable';
+    }
+  } catch (e) {
+    debugLog('Permission error: ' + e.message, 'err');
+    btn.disabled    = false;
+    btn.textContent = 'Enable';
+  }
+}
+
+/* ═══════════════════════════════════════════
+   TEST NOTIFICATION
+═══════════════════════════════════════════ */
+async function sendTestNotification() {
+  if (Notification.permission !== 'granted') {
+    alert('Please enable notifications first.');
+    return;
+  }
+
+  const btn  = document.getElementById('testNotifBtn');
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Sending...';
+  btn.disabled    = true;
+
+  try {
+    if (currentUserUID) {
+      await db.collection('users').doc(currentUserUID)
+        .collection('notifications').add({
+          type:      'system',
+          fromName:  'Secure Messenger',
+          body:      '🔔 Test notification is working correctly!',
+          read:      false,
+          createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    await reg.showNotification('Secure Messenger', {
+      body:    '🔔 Test notification is working correctly!',
+      icon:    '/web-messager/icon.png',
+      tag:     'test-' + Date.now(),
+      vibrate: [200, 100, 200]
+    });
+
+    debugLog('Test sent ✅', 'ok');
+    btn.textContent = '✅ Sent!';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+
+  } catch (e) {
+    debugLog('Test error: ' + e.message, 'err');
+    btn.textContent = '❌ Failed';
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 3000);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   STATUS UI
+═══════════════════════════════════════════ */
+function showFCMStatus(type, msg) {
+  const el     = document.getElementById('fcmStatus');
+  el.className = `fcm-status show ${type}`;
+  el.textContent = msg;
+}
+function hideFCMStatus() {
+  document.getElementById('fcmStatus').classList.remove('show');
+}
+
+/* ═══════════════════════════════════════════
+   SETTINGS
+═══════════════════════════════════════════ */
+let notifSettings = {
+  messages: true, requests: true, calls: true,
+  sound: true, vibrate: true
+};
+
+function loadSettings() {
+  try {
+    const s = localStorage.getItem('notifSettings');
+    if (s) notifSettings = { ...notifSettings, ...JSON.parse(s) };
+  } catch (_) {}
+  document.getElementById('togMessages').checked = notifSettings.messages;
+  document.getElementById('togRequests').checked = notifSettings.requests;
+  document.getElementById('togCalls').checked    = notifSettings.calls;
+  document.getElementById('togSound').checked    = notifSettings.sound;
+  document.getElementById('togVibrate').checked  = notifSettings.vibrate;
+}
+
+function saveSettings() {
+  localStorage.setItem('notifSettings', JSON.stringify(notifSettings));
+}
+
+function bindSettings() {
+  [
+    ['togMessages', 'messages'],
+    ['togRequests', 'requests'],
+    ['togCalls',    'calls'],
+    ['togSound',    'sound'],
+    ['togVibrate',  'vibrate']
+  ].forEach(([id, key]) => {
+    document.getElementById(id).onchange = e => {
+      notifSettings[key] = e.target.checked;
+      saveSettings();
+    };
+  });
+}
+
+let settingsCollapsed = false;
+document.getElementById('settingsToggleBtn').onclick = () => {
+  settingsCollapsed = !settingsCollapsed;
+  document.getElementById('settingsBody').className =
+    'settings-body' + (settingsCollapsed ? ' collapsed' : '');
+  document.getElementById('settingsToggleBtn').textContent =
+    settingsCollapsed ? 'Show ▼' : 'Hide ▲';
+};
+
+/* ═══════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════ */
+function safeText(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  const d       = ts.toDate ? ts.toDate() : new Date(ts);
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+  const diffH   = Math.floor(diffMin / 60);
+  const diffD   = Math.floor(diffH / 24);
+  if (diffMin < 1)  return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffH   < 24) return `${diffH}h ago`;
+  if (diffD  === 1) return 'yesterday';
+  if (diffD   < 7)  return `${diffD}d ago`;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function isToday(ts) {
+  if (!ts) return false;
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toDateString() === new Date().toDateString();
+}
+
+function getGroupLabel(ts) {
+  if (!ts) return 'Earlier';
+  const d    = ts.toDate ? ts.toDate() : new Date(ts);
+  const now  = new Date();
+  const yest = new Date(); yest.setDate(yest.getDate() - 1);
+  if (d.toDateString() === now.toDateString())  return 'Today';
+  if (d.toDateString() === yest.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], {
+    weekday: 'long', month: 'short', day: 'numeric'
+  });
+}
+
+function getNotifConfig(type) {
+  const map = {
+    message:  { icon:'💬', iconClass:'msg',      badgeClass:'msg',      badgeText:'MESSAGE'        },
+    request:  { icon:'👋', iconClass:'req',      badgeClass:'req',      badgeText:'FRIEND REQUEST' },
+    call:     { icon:'📞', iconClass:'call',     badgeClass:'call',     badgeText:'CALL'           },
+    system:   { icon:'🔔', iconClass:'system',   badgeClass:'system',   badgeText:'SYSTEM'         },
+    security: { icon:'🔐', iconClass:'security', badgeClass:'security', badgeText:'SECURITY'       }
+  };
+  return map[type] || map.system;
+}
+
+/* ═══════════════════════════════════════════
+   STATS
+═══════════════════════════════════════════ */
+function updateStats(notifs) {
+  document.getElementById('totalCount').textContent  = notifs.length;
+  document.getElementById('unreadCount').textContent = notifs.filter(n => !n.read).length;
+  document.getElementById('todayCount').textContent  = notifs.filter(n => isToday(n.createdAt)).length;
+  document.getElementById('tabAll').textContent      = notifs.length;
+  document.getElementById('tabMessage').textContent  = notifs.filter(n => n.type === 'message').length;
+  document.getElementById('tabRequest').textContent  = notifs.filter(n => n.type === 'request').length;
+  document.getElementById('tabCall').textContent     = notifs.filter(n => n.type === 'call').length;
+  document.getElementById('tabSystem').textContent   =
+    notifs.filter(n => n.type === 'system' || n.type === 'security').length;
+}
+
+/* ═══════════════════════════════════════════
+   FILTER + RENDER
+═══════════════════════════════════════════ */
+function getFiltered() {
+  if (currentFilter === 'all') return allNotifications;
+  if (currentFilter === 'system')
+    return allNotifications.filter(n => n.type === 'system' || n.type === 'security');
+  return allNotifications.filter(n => n.type === currentFilter);
+}
+
+function renderNotifications() {
+  const list     = document.getElementById('notifList');
+  const empty    = document.getElementById('emptyState');
+  const skeleton = document.getElementById('skeletonList');
+
+  skeleton.style.display = 'none';
+  list.style.display     = 'flex';
+
+  const filtered = getFiltered();
+  displayedCount = Math.min(Math.max(displayedCount, PAGE_SIZE), filtered.length);
+  const toShow   = filtered.slice(0, displayedCount);
+
+  document.getElementById('loadMoreBtn')
+    .classList.toggle('show', filtered.length > displayedCount);
+
+  if (filtered.length === 0) {
+    list.innerHTML = '';
+    empty.classList.add('show');
+    return;
+  }
+
+  empty.classList.remove('show');
+  list.innerHTML = '';
+
+  const groups = {};
+  const order  = [];
+  toShow.forEach(n => {
+    const label = getGroupLabel(n.createdAt);
+    if (!groups[label]) { groups[label] = []; order.push(label); }
+    groups[label].push(n);
+  });
+
+  order.forEach((label, gi) => {
+    const groupEl     = document.createElement('div');
+    groupEl.className = 'notif-group';
+
+    const labelEl     = document.createElement('div');
+    labelEl.className = 'group-label';
+    labelEl.innerHTML = `<span>${safeText(label)}</span><div class="line"></div>`;
+    groupEl.appendChild(labelEl);
+
+    groups[label].forEach((notif, i) => {
+      groupEl.appendChild(buildCard(notif, gi * 10 + i));
+    });
+
+    list.appendChild(groupEl);
+  });
+}
+
+function buildCard(notif, animIdx) {
+  const cfg      = getNotifConfig(notif.type);
+  const isUnread = !notif.read;
+
+  const card      = document.createElement('div');
+  card.className  = 'notif-card' + (isUnread ? ' unread' : '');
+  card.dataset.id = notif.id;
+  card.style.animationDelay = (animIdx * 0.04) + 's';
+
+  // Icon
+  const iconEl      = document.createElement('div');
+  iconEl.className  = `notif-icon ${cfg.iconClass}`;
+  iconEl.textContent = cfg.icon;
+  if (isUnread) {
+    const dot     = document.createElement('div');
+    dot.className = 'unread-dot';
+    iconEl.appendChild(dot);
+  }
+
+  // Body
+  const bodyEl     = document.createElement('div');
+  bodyEl.className = 'notif-body';
+
+  const topEl      = document.createElement('div');
+  topEl.className  = 'notif-top';
+
+  const senderEl      = document.createElement('div');
+  senderEl.className   = 'notif-sender';
+  senderEl.textContent = notif.fromName || notif.title || 'Secure Messenger';
+
+  const timeEl      = document.createElement('div');
+  timeEl.className   = 'notif-time';
+  timeEl.textContent = formatTime(notif.createdAt);
+
+  topEl.appendChild(senderEl);
+  topEl.appendChild(timeEl);
+
+  const previewEl      = document.createElement('div');
+  previewEl.className   = 'notif-preview';
+  previewEl.textContent = notif.body || notif.message || '';
+
+  const badgeEl      = document.createElement('div');
+  badgeEl.className   = `type-badge ${cfg.badgeClass}`;
+  badgeEl.textContent = cfg.badgeText;
+
+  bodyEl.appendChild(topEl);
+  bodyEl.appendChild(previewEl);
+  bodyEl.appendChild(badgeEl);
+
+  // Actions
+  const actEl     = document.createElement('div');
+  actEl.className = 'notif-actions';
+
+  if (notif.type === 'request' && notif.status === 'pending') {
+    actEl.appendChild(makeBtn('accept',  '✓ Accept'));
+    actEl.appendChild(makeBtn('reject',  '✕ Reject'));
+    actEl.appendChild(makeBtn('dismiss', 'Dismiss'));
+  } else if (notif.type === 'message' && notif.chatFriendId) {
+    actEl.appendChild(makeBtn('open',    'Open Chat →', 'open-chat'));
+    actEl.appendChild(makeBtn('dismiss', 'Dismiss'));
+  } else {
+    actEl.appendChild(makeBtn('dismiss', 'Dismiss'));
+  }
+
+  actEl.querySelectorAll('.notif-act-btn').forEach(btn => {
+    btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      await handleAction(notif, btn.dataset.action, card);
+    });
+  });
+
+  bodyEl.appendChild(actEl);
+
+  // Delete
+  const delBtn      = document.createElement('button');
+  delBtn.className  = 'notif-delete-btn';
+  delBtn.title      = 'Delete';
+  delBtn.textContent = '✕';
+  delBtn.addEventListener('click', async e => {
+    e.stopPropagation();
+    await deleteNotification(notif.id, card);
+  });
+
+  card.appendChild(iconEl);
+  card.appendChild(bodyEl);
+  card.appendChild(delBtn);
+
+  card.addEventListener('click', async e => {
+    if (e.target.closest('.notif-act-btn') || e.target.closest('.notif-delete-btn')) return;
+    if (isUnread) {
+      await markAsRead(notif.id);
+      card.classList.remove('unread');
+      card.querySelector('.unread-dot')?.remove();
+    }
+    if (notif.type === 'message' && notif.chatFriendId) {
+      navigateToChat(notif); return;
+    }
+    card.classList.toggle('expanded');
+  });
+
+  addSwipeToDismiss(card, notif.id);
+  return card;
+}
+
+function makeBtn(action, label, extraClass) {
+  const b          = document.createElement('button');
+  b.className      = `notif-act-btn ${extraClass || action}`;
+  b.dataset.action = action;
+  b.textContent    = label;
+  return b;
+}
+
+function navigateToChat(notif) {
+  if (!notif.chatFriendId) return;
+  localStorage.setItem('selectedFriend', JSON.stringify({
+    id:       notif.chatFriendId,
+    name:     notif.fromName     || '',
+    username: notif.fromUsername || '',
+    phone:    notif.fromPhone    || '',
+    photo:    notif.fromPhoto    || ''
+  }));
+  window.location.href = 'chat.html';
+}
+
+function addSwipeToDismiss(card, notifId) {
+  let startX = 0, currentX = 0, dragging = false;
+  card.addEventListener('touchstart', e => {
+    startX = e.touches[0].clientX; dragging = true;
+  }, { passive: true });
+  card.addEventListener('touchmove', e => {
+    if (!dragging) return;
+    currentX = e.touches[0].clientX - startX;
+    if (currentX < 0) {
+      card.style.transform = `translateX(${currentX}px)`;
+      card.style.opacity   = String(Math.max(0, 1 + currentX / card.offsetWidth));
+    }
+  }, { passive: true });
+  card.addEventListener('touchend', () => {
+    dragging = false;
+    if (currentX < -100) deleteNotification(notifId, card);
+    else { card.style.transform = ''; card.style.opacity = ''; }
+    currentX = 0;
+  });
+}
+
+/* ═══════════════════════════════════════════
+   FIRESTORE OPS
+═══════════════════════════════════════════ */
+async function markAsRead(notifId) {
+  if (!currentUserUID) return;
+  try {
+    await db.collection('users').doc(currentUserUID)
+      .collection('notifications').doc(notifId)
+      .update({ read: true, readAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch (e) { console.warn('markAsRead:', e.message); }
+}
+
+async function deleteNotification(notifId, card) {
+  card.classList.add('dismissed');
+  setTimeout(() => {
+    card.remove();
+    document.querySelectorAll('.notif-group').forEach(g => {
+      if (!g.querySelector('.notif-card')) g.remove();
+    });
+    if (!document.querySelector('.notif-card'))
+      document.getElementById('emptyState').classList.add('show');
+  }, 420);
+  try {
+    await db.collection('users').doc(currentUserUID)
+      .collection('notifications').doc(notifId).delete();
+  } catch (e) { console.warn('deleteNotification:', e.message); }
+}
+
+async function handleAction(notif, action, card) {
+  const TS = firebase.firestore.FieldValue.serverTimestamp();
+
+  if (action === 'open') {
+    await markAsRead(notif.id); navigateToChat(notif); return;
+  }
+
+  if (action === 'accept' && notif.type === 'request') {
+    try {
+      const snap = await db.collection('friend_requests')
+        .where('fromUid', '==', notif.fromUid)
+        .where('toUid',   '==', currentUserUID)
+        .where('status',  '==', 'pending')
+        .limit(1).get();
+
+      if (!snap.empty) {
+        await snap.docs[0].ref.update({ status: 'accepted', updatedAt: TS });
+
+        const batch = db.batch();
+        batch.set(
+          db.collection('users').doc(currentUserUID)
+            .collection('friends').doc(notif.fromUid),
+          { friendUid: notif.fromUid, friendName: notif.fromName || '',
+            friendUsername: notif.fromUsername || '', createdAt: TS },
+          { merge: true }
+        );
+        batch.set(
+          db.collection('users').doc(notif.fromUid)
+            .collection('friends').doc(currentUserUID),
+          { friendUid: currentUserUID, createdAt: TS },
+          { merge: true }
+        );
+        await batch.commit();
+
+        const chatId = [currentUserUID, notif.fromUid].sort().join('_');
+        await db.collection('chats').doc(chatId).set(
+          { participants: [currentUserUID, notif.fromUid], createdAt: TS },
+          { merge: true }
+        );
+      }
+
+      await markAsRead(notif.id);
+      card.remove();
+      localStorage.setItem('selectedFriend', JSON.stringify({
+        id: notif.fromUid, name: notif.fromName || ''
+      }));
+      window.location.href = 'chat.html';
+
+    } catch (e) { alert('Failed to accept: ' + e.message); }
+    return;
+  }
+
+  if (action === 'reject' && notif.type === 'request') {
+    try {
+      const snap = await db.collection('friend_requests')
+        .where('fromUid', '==', notif.fromUid)
+        .where('toUid',   '==', currentUserUID)
+        .where('status',  '==', 'pending')
+        .limit(1).get();
+      if (!snap.empty)
+        await snap.docs[0].ref.update({ status: 'rejected', updatedAt: TS });
+    } catch (e) { console.warn(e); }
+    await deleteNotification(notif.id, card);
+    return;
+  }
+
+  if (action === 'dismiss') await deleteNotification(notif.id, card);
+}
+
+async function markAllRead() {
+  const unread = allNotifications.filter(n => !n.read);
+  if (!currentUserUID || !unread.length) return;
+  const batch = db.batch();
+  unread.forEach(n => batch.update(
+    db.collection('users').doc(currentUserUID)
+      .collection('notifications').doc(n.id),
+    { read: true, readAt: firebase.firestore.FieldValue.serverTimestamp() }
+  ));
+  try {
+    await batch.commit();
+    document.querySelectorAll('.notif-card.unread').forEach(c => {
+      c.classList.remove('unread');
+      c.querySelector('.unread-dot')?.remove();
+    });
+  } catch (e) { console.error(e); }
+}
+
+async function clearAll() {
+  if (!currentUserUID) return;
+  const filtered = getFiltered();
+  if (!filtered.length) return;
+  if (!confirm(`Delete ${filtered.length} notification${filtered.length !== 1 ? 's' : ''}?`)) return;
+  const batch = db.batch();
+  filtered.forEach(n => batch.delete(
+    db.collection('users').doc(currentUserUID)
+      .collection('notifications').doc(n.id)
+  ));
+  try { await batch.commit(); } catch (e) { console.error(e); }
+}
+
+/* ═══════════════════════════════════════════
+   LOAD NOTIFICATIONS
+═══════════════════════════════════════════ */
+function loadNotifications() {
+  if (!currentUserUID) return;
+  if (unsubscribeNotifs) unsubscribeNotifs();
+
+  document.getElementById('skeletonList').style.display = 'block';
+  document.getElementById('notifList').style.display    = 'none';
+
+  unsubscribeNotifs = db.collection('users').doc(currentUserUID)
+    .collection('notifications')
+    .orderBy('createdAt', 'desc')
+    .limit(100)
+    .onSnapshot(snapshot => {
+      allNotifications = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      displayedCount   = PAGE_SIZE;
+      updateStats(allNotifications);
+      renderNotifications();
+    }, err => {
+      console.error('Snapshot error:', err);
+      document.getElementById('skeletonList').style.display = 'none';
+      document.getElementById('notifList').style.display    = 'flex';
+      const empty = document.getElementById('emptyState');
+      empty.classList.add('show');
+      if (err.code === 'permission-denied') {
+        empty.innerHTML = `
+          <div class="empty-icon">🔐</div>
+          <div class="empty-title">Permission Denied</div>
+          <div class="empty-sub">Update Firestore security rules.</div>`;
+      }
+    });
+}
+
+/* ═══════════════════════════════════════════
+   EVENT BINDINGS
+═══════════════════════════════════════════ */
+document.getElementById('filterTabs').addEventListener('click', e => {
+  const tab = e.target.closest('.filter-tab');
+  if (!tab) return;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  currentFilter  = tab.dataset.filter;
+  displayedCount = PAGE_SIZE;
+  renderNotifications();
+});
+
+document.getElementById('loadMoreBtn').addEventListener('click', () => {
+  displayedCount += PAGE_SIZE;
+  renderNotifications();
+});
+
+document.getElementById('markAllReadBtn').addEventListener('click', markAllRead);
+document.getElementById('clearAllBtn').addEventListener('click', clearAll);
+document.getElementById('enableNotifBtn').addEventListener('click', requestPushPermission);
+document.getElementById('testNotifBtn').addEventListener('click', sendTestNotification);
+
+/* ═══════════════════════════════════════════
+   AUTH
+═══════════════════════════════════════════ */
+auth.onAuthStateChanged(async user => {
+  if (!user) { window.location.href = 'index.html'; return; }
+  currentUserUID = user.uid;
+  loadSettings();
+  bindSettings();
+  loadNotifications();
+  await initFCM();
+});
+</script>
+</body>
+</html>
